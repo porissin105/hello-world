@@ -1,7 +1,7 @@
 # hello-world
 tensorflow vgg
 
-from __future__ import division, print_function, absolute_import
++ from __future__ import division, print_function, absolute_import
 from data import load_vgg
 import tensorflow as tf
 import numpy as np
