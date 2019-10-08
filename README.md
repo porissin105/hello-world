@@ -1,2 +1,2 @@
 # hello-world
-tensorflow vgg
+tensorflow LSTM vgg CNN
