@@ -1,0 +1,27 @@
+from __future__ import division
+from glob import glob
+import numpy as np
+import scipy.io as sio
+
+
+
+total_batch=10
+batch_size=10
+data = glob('file*.*') #data file address
+print(data)
+
+def load_train_mat_data(image_path, x_size=64,y_size=64):
+    img = sio.loadmat(image_path[0])['img']
+    img = np.reshape(img, [x_size, y_size, 1])
+    return img
+
+for epoch in range(10):
+    np.random.shuffle(data)
+    for step in range(1, total_batch+1):
+        batch_files = list(zip(data[step * batch_size:(step + 1) * batch_size]))
+        print(batch_files)
+        batch_images = [load_train_mat_data(image_path=batch_file, x_size=128, y_size=128) for batch_file in batch_files]
+        batch_images = np.array(batch_images).astype(np.float32)
+        print(batch_images.shape)
+
+
