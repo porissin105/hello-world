@@ -12,7 +12,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'    # use gpu 0
 config = tf.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.4  # use 40 % gpu memory
 
-model_path = "C:\\Users\student4\Desktop\Wistar_Rat"  # save path
+model_path = "data"  # save path # data = data address
 
 # Training Parameters
 data_sample = 122332
