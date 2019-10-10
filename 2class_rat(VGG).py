@@ -10,7 +10,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'    # use gpu 0
 config = tf.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.4  # use 40 % gpu memory
 
-model_path = "C:/Users/student5/Desktop/practice/save/model.ckpt"  # save path
+model_path = "data"  # save path # data = data address
 
 # Training Parameters
 epoch = 100
