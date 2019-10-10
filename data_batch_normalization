@@ -1,0 +1,188 @@
+
+from __future__ import division, print_function, absolute_import
+import tensorflow as tf
+import scipy.io as sio
+import os
+import numpy as np
+import tensorflow.contrib.slim as slim
+
+traindata1=sio.loadmat('data1')['Train_EEG_1']
+traindata2=sio.loadmat('data2')['Train_EEG_2']
+trainlabel =sio.loadmat('data_label')['Train_Label']
+testdata=sio.loadmat('data3')['Test_EEG_1']
+testlabel=sio.loadmat('data_label2')['Test_Label']
+traindata=np.concatenate((traindata1, traindata2), 0)
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'    # close the warning
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'    # use gpu 0
+config = tf.ConfigProto()
+config.gpu_options.per_process_gpu_memory_fraction = 0.4 # use 40 % gpu memory
+
+
+model_path="C:/Users/student6/save/model.ckpt" # save path
+
+# Training Parameters
+data_sample=122332
+epoch = 100                  # 100 runs with 122332 train data
+total_batch = 300            # In each runs , train data  = 300 x 107=122100 (total_batch x batch_size)
+batch_size = 407
+display_step = 50
+keep_prob = 0.8
+# Shuffle coefficient for all data
+allran_num = np.arange(0,data_sample)
+np.random.shuffle(allran_num)
+allInt = allran_num.astype(int)
+Indexall = allInt.tolist()
+# Shuffle coefficient in train step
+ran_num = np.arange(0,data_sample)
+np.random.shuffle(ran_num)
+Int = ran_num.astype(int)
+Index = Int.tolist()
+
+traindata=traindata[Indexall]
+trainlabel=trainlabel[Indexall]
+traindata=np.reshape(traindata,[122332,1,1536,1])
+testdata=np.reshape(testdata,[43176,1,1536,1])
+
+
+# Learning rate decay
+learn_init = 0.01
+global_step = tf.Variable(0, trainable=False)
+learning_rate = tf.train.exponential_decay(learn_init, global_step, total_batch, 0.9, staircase=True)
+
+# placeholder
+X= tf.placeholder(tf.float32, [None, 1, 1536, 1])
+Y = tf.placeholder(tf.float32, [None, 2])
+is_training = tf.placeholder(tf.bool)
+
+
+
+##-----------------------CNN--------------------------------------
+
+x = tf.convert_to_tensor(X,np.float32)
+
+
+conv1 = tf.layers.conv2d(x, 16, [1, 2], (1, 2), 'same')
+conv1 = tf.layers.batch_normalization(conv1, training=is_training)
+conv1 = tf.nn.relu(conv1)
+pool1 = tf.layers.max_pooling2d(conv1, [1,2], (1,2))
+
+conv2 = tf.layers.conv2d(pool1, 32, [1, 2], (1, 2), 'same')
+conv2 = tf.layers.batch_normalization(conv2, training=is_training)
+conv2 = tf.nn.relu(conv2)
+pool2 = tf.layers.max_pooling2d(conv2, [1,2], (1,2))
+
+conv3=tf.layers.conv2d(pool2,64,[1,2],[1,2],'same')
+conv3= tf.layers.batch_normalization(conv3,training=is_training)
+conv3=tf.nn.relu(conv3)
+pool3=tf.layers.max_pooling2d(conv3,[1,2],(1,2))
+
+
+
+
+
+##---------------- Fully connected layer--------------------------
+
+flat = slim.flatten(pool3)
+
+fully_1 = tf.layers.dense(flat, 128)
+fully_1 = tf.layers.batch_normalization(fully_1, training=is_training)
+fully_1 = tf.nn.relu(fully_1)
+fully_1 = tf.layers.dropout(fully_1, rate=keep_prob,training=is_training)
+
+logits = tf.layers.dense(fully_1, 2)
+
+
+
+
+# Output layer & Accuracy
+prediction = tf.nn.softmax(logits)
+loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits, labels=Y))
+correct_pred = tf.equal(tf.argmax(prediction, 1), tf.argmax(Y, 1))
+accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+
+# Batch_normalization tensorflow official
+update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+with tf.control_dependencies(update_ops):
+    train_op = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss_op, global_step=global_step)
+
+
+init = tf.global_variables_initializer()
+saver = tf.train.Saver()
+
+best_test_accuracy = 0
+count = 0
+counter = 0
+
+with tf.Session(config=config) as sess:
+    sess.run(init)
+
+    for epoch in range(1, epoch+1):
+        result_train = 0
+        result_test = 0
+        print("--------------Epoch" + str(epoch) + "----------------")
+
+        for step in range(1, total_batch+1):
+
+            sess.run(train_op, feed_dict={X: traindata[(batch_size) * (step - 1):(batch_size) + (batch_size) * (step - 1)],
+                                          Y: trainlabel[(batch_size) * (step - 1):(batch_size) + (batch_size) * (step - 1)],
+                                          is_training: True})
+
+            if step % display_step == 0:
+                acc = sess.run(accuracy, feed_dict={X:traindata[(batch_size) * (step - 1):(batch_size) + (batch_size) * (step - 1)],
+                                                    Y:trainlabel[(batch_size) * (step - 1):(batch_size) + (batch_size) * (step - 1)],
+                                                    is_training: False})
+                print("Step " + str(step) + ", Training Accuracy= " + "{:.4f}".format(acc))
+
+
+        for x in range(5):
+            result_train_1=sess.run(accuracy,
+                                    feed_dict={X:traindata[x*24000:(x+1)*24000],
+                                               Y:trainlabel[x*24000:(x+1)*24000],
+                                               is_training: False})
+            result_train = result_train + result_train_1 * (1 / 5)
+            result_test = sess.run(accuracy,
+                               feed_dict={X:testdata[:24000],
+                                          Y:testlabel[:24000],
+                                          is_training: False})
+        # early stop
+
+        count = count + 1
+        counter = counter + 1
+        if best_test_accuracy <= result_test and result_train - result_test < 0.1:
+            best_test_accuracy = result_test
+            print("***** best test  accuracy :" + "{:.4f}".format(best_test_accuracy) + " ****")
+            print("***** best train accuracy :" + "{:.4f}".format(result_train) + " ****")
+            count = 0
+            save_path = saver.save(sess, model_path, write_meta_graph=False)
+        else:
+            print("Testing  accuracy=" + "{:.4f}".format(result_test))
+            print("Training accuracy=" + "{:.4f}".format(result_train))
+
+        if count == 100:
+            break
+        if result_train - result_test < 0.1:
+            counter = 0
+        if counter == 100:
+            break
+# Restore weights & biases variable
+print("----------------------Restore------------------------------")
+with tf.Session() as sess:
+
+    saver.restore(sess, model_path)
+    result_test = 0
+    result_train = 0
+
+    for x in range(5):
+        result_train_1 = sess.run(accuracy,
+                                  feed_dict={X:traindata[x*24000:(x+1)*24000],
+                                             Y:trainlabel[x*24000:(x+1)*24000] ,
+                                             is_training: False})
+        result_train = result_train + result_train_1 * (1 / 5)
+
+        result_test = sess.run(accuracy,
+                               feed_dict={X:testdata[:24000],
+                                          Y:testlabel[:24000],
+                                          is_training: False})
+    print("Best testing  accuracy=" + "{:.4f}".format(result_test))
+    print("Best training accuracy=" + "{:.4f}".format(result_train))
